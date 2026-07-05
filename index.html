@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  工作進度追蹤 To-Do App v5（奶油色系）
+  前端：GitHub Pages ／ 後端：Apps Script + Google 試算表
+  【務必修改】下方 GAS_URL 貼上你部署後的 /exec 網址。
+  通行碼不再寫在程式碼裡：第一次開啟時輸入，儲存在自己的裝置上。
+  ============================================================
+-->
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily // Work進度追蹤 🕰️｜To-Do</title>
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#f6efe3">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="apple-touch-icon" href="./icon-192.png">
+    <link rel="icon" type="image/png" href="./icon-192.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f6efe3; color: #574432; }
+        .cream-card {
+            background: #fffcf5;
+            border: 1px solid #eadcc4;
+            box-shadow: 0 2px 10px rgba(151, 116, 60, 0.07);
+        }
+        input[type=range] { accent-color: #d9973f; }
+        input[type=checkbox] { accent-color: #6faf7c; width: 1.05rem; height: 1.05rem; }
+        .fade-in { animation: fadeIn .25s ease; }
+        @keyframes fadeIn { from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+        .inp { background: #ffffff; border: 1px solid #e3d5bd; color: #574432; }
+        .inp::placeholder { color: #c3b299; }
+        .inp:focus { outline: none; box-shadow: 0 0 0 2px rgba(217,151,63,.45); border-color: #d9973f; }
+    </style>
+</head>
+<body class="font-sans min-h-screen py-8 px-4 sm:px-6 lg:px-8">
+
+<!-- ==================== 通行碼登入畫面 ==================== -->
+<div id="lockScreen" class="hidden fixed inset-0 z-50 bg-[#f6efe3] flex items-center justify-center px-4">
+    <div class="cream-card rounded-2xl p-8 w-full max-w-sm text-center fade-in">
+        <img src="./icon-192.png" alt="" class="w-16 h-16 mx-auto rounded-2xl mb-4 shadow-md">
+        <h2 class="text-xl font-extrabold text-[#5b452e] mb-1">Daily // Work進度追蹤 🕰️</h2>
+        <p class="text-sm text-[#9c8a72] mb-5"><i class="fa-solid fa-lock mr-1"></i>請輸入密碼</p>
+        <input type="password" id="lockInput" placeholder="密碼" autocomplete="off"
+               class="inp w-full rounded-xl px-4 py-3 text-center tracking-widest transition mb-2">
+        <p id="lockErr" class="hidden text-xs text-[#c05555] mb-2"><i class="fa-solid fa-circle-exclamation mr-1"></i>密碼不正確，請再試一次</p>
+        <button id="lockBtn" type="button"
+                class="w-full bg-gradient-to-r from-[#e0a04a] to-[#c8823a] text-white font-bold py-3 rounded-xl shadow-md hover:from-[#d99539] hover:to-[#bb762e] active:scale-[0.99] transition">
+            <i class="fa-solid fa-unlock mr-1"></i>進 入
+        </button>
+        <p class="text-xs text-[#b3a288] mt-4">密碼儲存在你自己的裝置上</p>
+    </div>
+</div>
+
+<!-- ==================== 分類管理視窗 ==================== -->
+<div id="catModal" class="hidden fixed inset-0 z-40 bg-black/30 flex items-center justify-center px-4" onclick="if(event.target===this)closeCatModal()">
+    <div class="cream-card rounded-2xl p-6 w-full max-w-sm fade-in">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="font-bold text-[#5b452e]"><i class="fa-solid fa-tags text-[#c8823a] mr-2"></i>管理分類</h2>
+            <button onclick="closeCatModal()" class="w-8 h-8 rounded-lg text-[#b3a288] hover:text-[#c05555] transition"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="catModalList" class="space-y-2 mb-4 max-h-64 overflow-y-auto"></div>
+        <div class="flex gap-2">
+            <input type="text" id="newCatName" placeholder="新分類名稱（例：家庭、進修）" class="inp flex-1 rounded-xl px-3 py-2.5 text-sm transition">
+            <button onclick="catAdd()" class="px-4 py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-[#e0a04a] to-[#c8823a] text-white shadow-md hover:from-[#d99539] hover:to-[#bb762e] transition">
+                <i class="fa-solid fa-plus mr-1"></i>新增
+            </button>
+        </div>
+        <p class="text-xs text-[#b3a288] mt-3"><i class="fa-solid fa-circle-info mr-1"></i>改名會同步更新所有使用該分類的任務；刪除分類不會刪除任務，任務會保留原分類文字。</p>
+    </div>
+</div>
+
+<div class="max-w-4xl mx-auto">
+
+    <!-- 標題 -->
+    <div class="flex items-end justify-between mb-5">
+        <div>
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-[#5b452e] tracking-tight">
+                <i class="fa-solid fa-mug-hot text-[#c8823a] mr-2"></i>Daily // Work進度追蹤 🕰️
+            </h1>
+            <p class="text-sm text-[#9c8a72] mt-1"><i class="fa-regular fa-calendar-days mr-1"></i><span id="todayLabel"></span></p>
+        </div>
+        <div class="flex gap-3 text-sm">
+            <button id="keyBtn" type="button" title="重設通行碼" class="text-[#9c8a72] hover:text-[#c8823a] transition"><i class="fa-solid fa-key"></i></button>
+            <button id="refreshBtn" type="button" class="text-[#9c8a72] hover:text-[#c8823a] transition"><i class="fa-solid fa-rotate mr-1"></i>重新整理</button>
+        </div>
+    </div>
+
+    <!-- 主頁籤 -->
+    <div class="flex gap-2 mb-6">
+        <button id="pageTabList" class="ptab flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-[#e0a04a] to-[#c8823a] text-white shadow-md">
+            <i class="fa-solid fa-list-check mr-1.5"></i>任務清單
+        </button>
+        <button id="pageTabDash" class="ptab flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-bold cream-card text-[#8a7561] hover:text-[#5b452e] transition">
+            <i class="fa-solid fa-chart-pie mr-1.5"></i>總覽分析
+        </button>
+    </div>
+
+    <!-- 連線狀態列 -->
+    <div id="netBanner" class="hidden mb-4 rounded-xl border border-[#e6c17a] bg-[#faedd2] px-4 py-2.5 text-sm text-[#a8742b]">
+        <i class="fa-solid fa-triangle-exclamation mr-2"></i><span id="netBannerText">目前無法連線到後端，顯示的可能不是最新資料。</span>
+    </div>
+
+    <!-- ==================== 頁面一：任務清單 ==================== -->
+    <div id="pageList">
+
+        <!-- 統計看板 -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <div class="cream-card rounded-2xl p-4 text-center">
+                <div class="text-xs text-[#9c8a72] mb-1"><i class="fa-regular fa-clipboard mr-1"></i>尚未開始</div>
+                <div class="text-3xl font-black text-[#5b452e]" id="statTodo">--</div>
+            </div>
+            <div class="cream-card rounded-2xl p-4 text-center">
+                <div class="text-xs text-[#9c8a72] mb-1"><i class="fa-solid fa-person-running mr-1"></i>進行中</div>
+                <div class="text-3xl font-black text-[#c8823a]" id="statDoing">--</div>
+            </div>
+            <div class="cream-card rounded-2xl p-4 text-center">
+                <div class="text-xs text-[#9c8a72] mb-1"><i class="fa-regular fa-circle-check mr-1"></i>已完成</div>
+                <div class="text-3xl font-black text-[#5e8f60]" id="statDone">--</div>
+            </div>
+            <div class="cream-card rounded-2xl p-4 text-center">
+                <div class="text-xs text-[#9c8a72] mb-1"><i class="fa-solid fa-fire mr-1"></i>已逾期</div>
+                <div class="text-3xl font-black text-[#c05555]" id="statOverdue">--</div>
+            </div>
+        </div>
+
+        <!-- 今日執行＋七天內到期提醒 -->
+        <div id="upcomingCard" class="hidden cream-card rounded-2xl p-5 mb-5 border-l-4 !border-l-[#e0a04a]">
+            <div class="flex items-center justify-between cursor-pointer" onclick="toggleUpcoming()">
+                <h2 class="font-bold text-[#a8742b]"><i class="fa-solid fa-bell mr-2"></i><span id="upcomingTitle">工作提醒</span></h2>
+                <i id="upcomingChevron" class="fa-solid fa-chevron-up text-[#c3b299] text-sm"></i>
+            </div>
+            <div id="upcomingBody" class="mt-3 space-y-3"></div>
+        </div>
+
+        <!-- 新增／編輯卡 -->
+        <div class="cream-card rounded-2xl p-6 mb-6">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h2 class="font-bold text-[#5b452e]"><i class="fa-solid fa-feather-pointed text-[#c8823a] mr-2"></i><span id="formTitle">新增任務</span></h2>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <select id="tmplSelect" class="inp rounded-lg px-2 py-1.5 text-xs transition max-w-[10rem]">
+                        <option value="">套用範本…</option>
+                    </select>
+                    <button type="button" onclick="applyTmpl()" title="套用選取的範本" class="text-xs px-2.5 py-1.5 rounded-lg bg-[#f2e8da] text-[#a1795a] border border-[#dcc8b0] hover:bg-[#ecdfc9] transition"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>套用</button>
+                    <button type="button" onclick="delTmpl()" title="刪除選取的範本" class="text-xs px-2.5 py-1.5 rounded-lg text-[#b3a288] border border-[#e0d3ba] hover:text-[#c05555] transition"><i class="fa-solid fa-trash-can"></i></button>
+                    <button id="cancelEditBtn" type="button" class="hidden text-xs text-[#9c8a72] hover:text-[#c05555] transition">
+                        <i class="fa-solid fa-xmark mr-1"></i>取消編輯
+                    </button>
+                </div>
+            </div>
+            <form id="taskForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-[#8a7561] mb-1.5"><i class="fa-solid fa-pen-nib mr-1 text-[#c8a06a]"></i>任務名稱 <span class="text-[#c05555]">*</span></label>
+                    <input type="text" id="fName" placeholder="例：🐶要吃全能狗S!!" required
+                           class="inp w-full rounded-xl px-4 py-3 transition">
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-[#8a7561] mb-1.5"><i class="fa-solid fa-tags mr-1 text-[#c8a06a]"></i>分類</label>
+                        <div class="flex gap-1.5">
+                            <select id="fCategory" class="inp flex-1 min-w-0 rounded-xl px-2 py-3 transition"></select>
+                            <button type="button" onclick="openCatModal()" title="管理分類" class="w-11 shrink-0 rounded-xl bg-[#f2e8da] text-[#a1795a] border border-[#dcc8b0] hover:bg-[#ecdfc9] transition"><i class="fa-solid fa-gear"></i></button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-[#8a7561] mb-1.5"><i class="fa-solid fa-flag mr-1 text-[#c8a06a]"></i>優先度</label>
+                        <select id="fPriority" class="inp w-full rounded-xl px-3 py-3 transition">
+                            <option value="高">高</option>
+                            <option value="中" selected>中</option>
+                            <option value="低">低</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-[#8a7561] mb-1.5"><i class="fa-solid fa-bars-progress mr-1 text-[#c8a06a]"></i>狀態</label>
+                        <select id="fStatus" class="inp w-full rounded-xl px-3 py-3 transition">
+                            <option value="待辦" selected>尚未開始</option>
+                            <option value="進行中">進行中</option>
+                            <option value="已完成">已完成</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-[#8a7561] mb-1.5"><i class="fa-solid fa-repeat mr-1 text-[#c8a06a]"></i>重複</label>
+                        <select id="fRepeat" class="inp w-full rounded-xl px-3 py-3 transition">
+                            <option value="">不重複</option>
+                            <option value="每週">每週</option>
+                            <option value="每月">每月</option>
+                            <option value="每年">每年</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-[#8a7561] mb-1.5"><i class="fa-solid fa-calendar-day mr-1 text-[#c8a06a]"></i>執行日期</label>
+                        <input type="date" id="fExec" class="inp w-full rounded-xl px-3 py-3 transition">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-[#8a7561] mb-1.5"><i class="fa-solid fa-calendar-check mr-1 text-[#c8a06a]"></i>截止日</label>
+                        <input type="date" id="fDue" class="inp w-full rounded-xl px-3 py-3 transition">
+                    </div>
+                </div>
+
+                <!-- 子任務編輯區 -->
+                <div>
+                    <div class="flex items-center justify-between mb-1.5">
+                        <label class="block text-sm font-medium text-[#8a7561]"><i class="fa-solid fa-list-ul mr-1 text-[#c8a06a]"></i>子任務（各有執行日與截止日）</label>
+                        <button type="button" onclick="addSubRow()" class="text-xs px-3 py-1.5 rounded-lg bg-[#f6e3c3] text-[#a8742b] border border-[#e3c48d] hover:bg-[#f2d9ac] transition">
+                            <i class="fa-solid fa-plus mr-1"></i>新增子任務
+                        </button>
+                    </div>
+                    <div id="subsBox" class="space-y-2"></div>
+                    <p class="text-xs text-[#b3a288] mt-1.5"><i class="fa-solid fa-circle-info mr-1"></i>有子任務時，母任務進度會由勾選狀況自動計算（全勾＝已完成）。</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-[#8a7561] mb-1.5"><i class="fa-regular fa-note-sticky mr-1 text-[#c8a06a]"></i>備註／進度說明</label>
+                    <textarea id="fNote" rows="2" placeholder="工作內容、目前進度說明…"
+                              class="inp w-full rounded-xl px-4 py-3 transition"></textarea>
+                </div>
+                <button type="submit" id="submitBtn"
+                        class="w-full bg-gradient-to-r from-[#e0a04a] to-[#c8823a] text-white font-bold py-3 rounded-xl shadow-md hover:from-[#d99539] hover:to-[#bb762e] active:scale-[0.99] transition disabled:opacity-50">
+                    <i class="fa-solid fa-circle-plus mr-1"></i>新 增 任 務
+                </button>
+            </form>
+        </div>
+
+        <!-- 篩選列 -->
+        <div class="cream-card rounded-2xl p-4 mb-4 flex flex-wrap items-center gap-2">
+            <div class="flex gap-1.5 flex-wrap" id="filterTabs">
+                <button data-f="all" class="ftab px-3.5 py-1.5 rounded-full text-sm font-medium bg-[#f6e3c3] text-[#a8742b] border border-[#e3c48d]"><i class="fa-solid fa-layer-group mr-1"></i>全部</button>
+                <button data-f="待辦" class="ftab px-3.5 py-1.5 rounded-full text-sm font-medium text-[#9c8a72] border border-[#e0d3ba] hover:text-[#5b452e]"><i class="fa-regular fa-clipboard mr-1"></i>尚未開始</button>
+                <button data-f="進行中" class="ftab px-3.5 py-1.5 rounded-full text-sm font-medium text-[#9c8a72] border border-[#e0d3ba] hover:text-[#5b452e]"><i class="fa-solid fa-person-running mr-1"></i>進行中</button>
+                <button data-f="已完成" class="ftab px-3.5 py-1.5 rounded-full text-sm font-medium text-[#9c8a72] border border-[#e0d3ba] hover:text-[#5b452e]"><i class="fa-regular fa-circle-check mr-1"></i>已完成</button>
+            </div>
+            <select id="catFilter" class="inp rounded-full px-3 py-1.5 text-sm transition">
+                <option value="all">全部分類</option>
+            </select>
+            <div class="relative flex-1 min-w-[160px]">
+                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-[#c3b299] text-sm"></i>
+                <input type="text" id="searchBox" placeholder="搜尋任務、子任務、備註…"
+                       class="inp w-full rounded-xl pl-10 pr-4 py-2 text-sm transition">
+            </div>
+        </div>
+
+        <!-- 任務清單 -->
+        <div id="taskList" class="space-y-3">
+            <div class="cream-card rounded-2xl p-8 text-center text-[#9c8a72]" id="loadingCard">
+                <i class="fa-solid fa-spinner fa-spin mr-2"></i>資料載入中…
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 頁面二：總覽分析 ==================== -->
+    <div id="pageDash" class="hidden">
+
+        <!-- AI 工作建議 -->
+        <div class="cream-card rounded-2xl p-6 mb-5 border-l-4 !border-l-[#b98a5a]">
+            <div class="flex items-center justify-between flex-wrap gap-3 mb-1">
+                <h2 class="font-bold text-[#5b452e]"><i class="fa-solid fa-wand-magic-sparkles text-[#b98a5a] mr-2"></i>AI 工作建議</h2>
+                <button id="aiBtn" type="button"
+                        class="px-4 py-2 rounded-xl text-sm font-bold bg-gradient-to-r from-[#b98a5a] to-[#9c6f42] text-white shadow-md hover:from-[#ad7e4e] hover:to-[#8f6338] active:scale-[0.98] transition disabled:opacity-50">
+                    <i class="fa-solid fa-bolt mr-1"></i>產生建議
+                </button>
+            </div>
+            <p class="text-xs text-[#b3a288] mb-3">AI 會根據目前的任務與子任務清單（含執行日與截止日），建議今日優先順序、提醒風險並分析工作量。</p>
+            <div id="aiResult" class="hidden rounded-xl bg-[#faf4e8] border border-[#e0cba4] p-4 text-sm text-[#574432] whitespace-pre-wrap leading-relaxed"></div>
+        </div>
+
+        <!-- 摘要卡 -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <div class="cream-card rounded-2xl p-4 text-center">
+                <div class="text-xs text-[#9c8a72] mb-1"><i class="fa-solid fa-inbox mr-1"></i>總任務數</div>
+                <div class="text-3xl font-black text-[#5b452e]" id="dTotal">--</div>
+            </div>
+            <div class="cream-card rounded-2xl p-4 text-center">
+                <div class="text-xs text-[#9c8a72] mb-1"><i class="fa-solid fa-medal mr-1"></i>完成率</div>
+                <div class="text-3xl font-black text-[#5e8f60]"><span id="dRate">--</span><span class="text-base">%</span></div>
+            </div>
+            <div class="cream-card rounded-2xl p-4 text-center">
+                <div class="text-xs text-[#9c8a72] mb-1"><i class="fa-solid fa-gauge-high mr-1"></i>未完成平均進度</div>
+                <div class="text-3xl font-black text-[#c8823a]"><span id="dAvgProg">--</span><span class="text-base">%</span></div>
+            </div>
+            <div class="cream-card rounded-2xl p-4 text-center">
+                <div class="text-xs text-[#9c8a72] mb-1"><i class="fa-solid fa-hourglass-half mr-1"></i>7天內到期</div>
+                <div class="text-3xl font-black text-[#a8742b]" id="dDue7">--</div>
+            </div>
+        </div>
+
+        <!-- 圖表 -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="cream-card rounded-2xl p-5">
+                <h3 class="text-sm font-bold text-[#8a7561] mb-3"><i class="fa-solid fa-chart-pie text-[#c8823a] mr-2"></i>狀態分佈</h3>
+                <div class="h-56"><canvas id="chartStatus"></canvas></div>
+            </div>
+            <div class="cream-card rounded-2xl p-5">
+                <h3 class="text-sm font-bold text-[#8a7561] mb-3"><i class="fa-solid fa-flag text-[#c05555] mr-2"></i>優先度分佈（未完成）</h3>
+                <div class="h-56"><canvas id="chartPriority"></canvas></div>
+            </div>
+            <div class="cream-card rounded-2xl p-5">
+                <h3 class="text-sm font-bold text-[#8a7561] mb-3"><i class="fa-solid fa-layer-group text-[#a1795a] mr-2"></i>各分類任務數</h3>
+                <div class="h-56"><canvas id="chartCategory"></canvas></div>
+            </div>
+            <div class="cream-card rounded-2xl p-5">
+                <h3 class="text-sm font-bold text-[#8a7561] mb-3"><i class="fa-solid fa-chart-line text-[#5e8f60] mr-2"></i>近 8 週完成趨勢</h3>
+                <div class="h-56"><canvas id="chartTrend"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <p class="text-center text-xs text-[#c3b299] mt-8"><i class="fa-solid fa-cloud mr-1"></i>資料儲存於 Google 試算表 ｜ 佳里奇美醫院 教學研究組</p>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-medium shadow-xl fade-in"></div>
+
+<script>
+/* ================= 設定（TODO：務必修改） ================= */
+const GAS_URL = "https://script.google.com/macros/s/AKfycbx89XjfM8AK2Hk0lsdQBSiPxvhrVgwE1K0cz_3k6fdACsiCS8pZ8X5O5FhMnObPYwpjNA/exec";
+/* 通行碼不再寫在這裡：第一次開啟時輸入，儲存於裝置的 localStorage */
+let APP_TOKEN = localStorage.getItem("worklog_token") || "";
+
+/* ================= 狀態 ================= */
+let tasks = [];
+let cats = [];
+let tmpls = [];
+let currentFilter = "all";
+let currentCat = "all";
+let editingId = null;
+let charts = {};
+let openSubs = new Set();
+
+/* ================= 小工具 ================= */
+const $ = id => document.getElementById(id);
+function todayStr(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function addDaysStr(n){ const d=new Date(); d.setDate(d.getDate()+n); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function esc(s){ return (s==null?"":String(s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toast(msg, ok=true){
+    const t = $("toast");
+    t.textContent = msg;
+    t.className = "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-medium shadow-xl fade-in text-white " +
+        (ok ? "bg-[#6faf7c]" : "bg-[#cf6f6f]");
+    clearTimeout(t._timer);
+    t._timer = setTimeout(()=>t.classList.add("hidden"), 2600);
+}
+function newId(){ return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2,7); }
+function daysLeft(due){ const a=new Date(todayStr()), b=new Date(due); return Math.round((b-a)/86400000); }
+function dueLabel(due){
+    const d = daysLeft(due);
+    return d<0 ? `已逾期 ${-d} 天` : d===0 ? "今天到期" : `剩 ${d} 天`;
+}
+function dueColor(due){
+    const d = daysLeft(due);
+    return d<0 ? "text-[#c05555]" : d<=2 ? "text-[#b98a2f]" : "text-[#9c8a72]";
+}
+/* 依重複頻率位移日期（每月會處理月底問題，如 1/31 → 2/28） */
+function shiftDate(ds, rep){
+    if(!ds) return "";
+    const d = new Date(ds + "T00:00:00");
+    if(isNaN(d)) return "";
+    if(rep==="每週"){ d.setDate(d.getDate()+7); }
+    else if(rep==="每月"){
+        const day = d.getDate();
+        d.setDate(1); d.setMonth(d.getMonth()+1);
+        const last = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+        d.setDate(Math.min(day, last));
+    }
+    else if(rep==="每年"){ d.setFullYear(d.getFullYear()+1); }
+    else return ds;
+    return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+/* ===== 子任務相關工具 ===== */
+function subs(t){ return Array.isArray(t.subs) ? t.subs : []; }
+function subDone(t){ return subs(t).filter(s=>s.d).length; }
+function effectiveDue(t){
+    let ds = [];
+    if(t.due) ds.push(t.due);
+    subs(t).forEach(s=>{ if(!s.d && s.due) ds.push(s.due); });
+    return ds.length ? ds.sort()[0] : "";
+}
+function isOverdue(t){ const e=effectiveDue(t); return t.status!=="已完成" && e && e < todayStr(); }
+function isTodayExec(t){
+    const td = todayStr();
+    if(t.status==="已完成") return false;
+    if(t.exec===td) return true;
+    return subs(t).some(s=>!s.d && s.x===td);
+}
+
+/* ================= 通行碼登入 ================= */
+function showLock(err){
+    $("lockScreen").classList.remove("hidden");
+    $("lockErr").classList.toggle("hidden", !err);
+    $("lockInput").value = "";
+    setTimeout(()=>$("lockInput").focus(), 50);
+}
+function hideLock(){ $("lockScreen").classList.add("hidden"); }
+function submitLock(){
+    const v = $("lockInput").value.trim();
+    if(!v) return;
+    APP_TOKEN = v;
+    localStorage.setItem("worklog_token", v);
+    hideLock();
+    loadTasks();
+}
+$("lockBtn").addEventListener("click", submitLock);
+$("lockInput").addEventListener("keydown", e=>{ if(e.key==="Enter") submitLock(); });
+$("keyBtn").addEventListener("click", ()=>{
+    if(confirm("要清除本機儲存的通行碼並重新輸入嗎？")){
+        localStorage.removeItem("worklog_token");
+        APP_TOKEN = "";
+        showLock(false);
+    }
+});
+function onUnauthorized(){
+    localStorage.removeItem("worklog_token");
+    APP_TOKEN = "";
+    showLock(true);
+}
+
+/* ================= JSONP（讀資料一律用這個繞 CORS） ================= */
+function jsonp(extra, timeoutMs){
+    return new Promise((resolve, reject)=>{
+        const cb = 'gas_'+Date.now()+'_'+Math.floor(Math.random()*10000);
+        let timer=null;
+        const s=document.createElement('script');
+        function cleanup(){ if(timer)clearTimeout(timer); delete window[cb]; if(s.parentNode)s.parentNode.removeChild(s); }
+        window[cb]=function(d){ cleanup(); resolve(d); };
+        s.src = GAS_URL + '?callback=' + cb + '&token=' + encodeURIComponent(APP_TOKEN) + (extra?('&'+extra):'');
+        s.onerror=function(){ cleanup(); reject(new Error('連線失敗')); };
+        document.body.appendChild(s);
+        timer=setTimeout(function(){ cleanup(); reject(new Error('連線逾時')); }, timeoutMs||12000);
+    });
+}
+
+/* ================= 讀取任務清單（含分類與範本） ================= */
+function loadTasks(silent=false){
+    return jsonp('action=list').then(r=>{
+        if(r && r.result==='unauthorized'){ onUnauthorized(); return; }
+        if(!r || r.result!=='list'){ showNet(true); return; }
+        tasks = (r.tasks || []).map(t=>{ t.subs = Array.isArray(t.subs)?t.subs:[]; return t; });
+        cats = r.cats || [];
+        tmpls = r.tmpls || [];
+        showNet(false);
+        render();
+    }).catch(()=>{ showNet(true); if(!silent) render(); });
+}
+function showNet(bad, msg){
+    $("netBanner").classList.toggle("hidden", !bad);
+    if(msg) $("netBannerText").textContent = msg;
+}
+
+/* ================= 寫入（POST；catch 時改用重新讀取查證，不假裝成功） ================= */
+function postAction(payload, verifyFn, okMsg){
+    const p = new URLSearchParams();
+    p.append('token', APP_TOKEN);
+    Object.keys(payload).forEach(k=>p.append(k, payload[k]==null?"":payload[k]));
+    return fetch(GAS_URL, {method:"POST", body:p, headers:{"Content-Type":"application/x-www-form-urlencoded"}})
+        .then(r=>r.json())
+        .then(res=>{
+            if(res.result==="success"){ if(okMsg) toast(okMsg); return loadTasks(true); }
+            if(res.result==="unauthorized"){ onUnauthorized(); return; }
+            toast("系統異常：" + (res.message||""), false);
+            return loadTasks(true);
+        })
+        .catch(()=>{
+            return loadTasks(true).then(()=>{
+                if(verifyFn && verifyFn()) { if(okMsg) toast(okMsg); }
+                else toast("動作未完成，請再試一次", false);
+            }).catch(()=>toast("送出後無法確認結果，請按「重新整理」檢查", false));
+        });
+}
+function updatePayload(t){
+    return { action:"update", id:t.id, name:t.name, category:t.category, priority:t.priority,
+             exec:t.exec, due:t.due, status:t.status, progress:t.progress, note:t.note,
+             repeat:t.repeat||"", subs: JSON.stringify(subs(t)) };
+}
+
+/* ================= 重複任務：完成時自動建立下一期 ================= */
+function spawnNext(t){
+    const rep = t.repeat||"";
+    if(!rep) return;
+    const nid = newId();
+    const nextSubs = subs(t).map(s=>({ t:s.t, x:shiftDate(s.x, rep), due:shiftDate(s.due, rep), d:0 }));
+    const payload = {
+        action:"add", id:nid,
+        name: t.name, category: t.category, priority: t.priority,
+        exec: shiftDate(t.exec, rep), due: shiftDate(t.due, rep),
+        status:"待辦", progress:0, note: t.note, repeat: rep,
+        subs: JSON.stringify(nextSubs)
+    };
+    const label = payload.due ? ("（截止 " + payload.due + "）") : payload.exec ? ("（執行 " + payload.exec + "）") : "";
+    return postAction(payload, ()=>tasks.some(v=>v.id===nid), "🔁 已自動建立下期任務" + label);
+}
+
+/* ================= 分類管理 ================= */
+function openCatModal(){ renderCatModal(); $("catModal").classList.remove("hidden"); }
+function closeCatModal(){ $("catModal").classList.add("hidden"); }
+function renderCatModal(){
+    $("catModalList").innerHTML = cats.length ? cats.map(c=>`
+        <div class="flex items-center justify-between gap-2 bg-[#faf4e8] border border-[#eadcc4] rounded-xl px-3 py-2 text-sm">
+            <span class="text-[#574432]"><i class="fa-solid fa-tag mr-1.5 text-[#c8a06a]"></i>${esc(c)}</span>
+            <span class="flex gap-1">
+                <button onclick="catRename('${esc(c)}')" title="改名" class="w-8 h-8 rounded-lg text-[#b3a288] hover:text-[#c8823a] hover:bg-[#f6e3c3] transition"><i class="fa-solid fa-pen"></i></button>
+                <button onclick="catDel('${esc(c)}')" title="刪除" class="w-8 h-8 rounded-lg text-[#b3a288] hover:text-[#c05555] hover:bg-[#f7dede] transition"><i class="fa-solid fa-trash-can"></i></button>
+            </span>
+        </div>`).join("") :
+        `<p class="text-sm text-[#b3a288] text-center py-4">尚無分類，請在下方新增</p>`;
+}
+function catAdd(){
+    const name = $("newCatName").value.trim();
+    if(!name){ toast("請輸入分類名稱", false); return; }
+    if(cats.includes(name)){ toast("此分類已存在", false); return; }
+    $("newCatName").value = "";
+    postAction({action:"cat_add", name:name}, ()=>cats.includes(name), "已新增分類「"+name+"」")
+        .then(renderCatModal);
+}
+function catDel(name){
+    if(!confirm("確定刪除分類「"+name+"」？\n（不會刪除任務，任務會保留原分類文字）")) return;
+    postAction({action:"cat_del", name:name}, ()=>!cats.includes(name), "已刪除分類「"+name+"」")
+        .then(renderCatModal);
+}
+function catRename(name){
+    const nn = prompt("將分類「"+name+"」改名為:", name);
+    if(!nn || nn.trim()===name) return;
+    const newName = nn.trim();
+    if(cats.includes(newName)){ toast("已有同名分類", false); return; }
+    postAction({action:"cat_rename", name:name, newName:newName},
+        ()=>cats.includes(newName), "已改名為「"+newName+"」（相關任務已同步更新）")
+        .then(renderCatModal);
+}
+
+/* ================= 範本 ================= */
+function renderTmplSelect(){
+    const sel = $("tmplSelect");
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">套用範本…</option>' +
+        tmpls.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("");
+    if([...sel.options].some(o=>o.value===cur)) sel.value = cur;
+}
+function applyTmpl(){
+    const id = $("tmplSelect").value;
+    if(!id){ toast("請先選擇範本", false); return; }
+    const tp = tmpls.find(t=>t.id===id);
+    if(!tp || !tp.data){ toast("範本內容讀取失敗", false); return; }
+    const d = tp.data;
+    resetForm();
+    $("fName").value = d.name || "";
+    $("fPriority").value = d.priority || "中";
+    $("fRepeat").value = d.repeat || "";
+    $("fNote").value = d.note || "";
+    renderCatSelect(d.category || "");
+    (d.subs||[]).forEach(s=>addSubRow(s.t, "", "", 0));
+    toast("已套用範本，請填入日期");
+    window.scrollTo({top:0, behavior:"smooth"});
+    $("fName").focus();
+}
+function delTmpl(){
+    const id = $("tmplSelect").value;
+    if(!id){ toast("請先選擇要刪除的範本", false); return; }
+    const tp = tmpls.find(t=>t.id===id);
+    if(!confirm("確定刪除範本「"+(tp?tp.name:"")+"」？")) return;
+    postAction({action:"tmpl_del", id:id}, ()=>!tmpls.some(t=>t.id===id), "範本已刪除");
+}
+function saveAsTmpl(taskId){
+    const t = tasks.find(x=>x.id===taskId);
+    if(!t) return;
+    const name = prompt("範本名稱：", t.name);
+    if(!name || !name.trim()) return;
+    const data = {
+        name: t.name, category: t.category, priority: t.priority,
+        repeat: t.repeat||"", note: t.note,
+        subs: subs(t).map(s=>({t:s.t}))
+    };
+    postAction({action:"tmpl_add", name:name.trim(), data: JSON.stringify(data)},
+        ()=>tmpls.some(x=>x.name===name.trim()), "已存為範本「"+name.trim()+"」");
+}
+
+/* ================= 子任務表單列 ================= */
+function addSubRow(t="", x="", due="", d=0){
+    const row = document.createElement("div");
+    row.className = "subrow flex flex-wrap items-center gap-2 bg-[#faf4e8] border border-[#eadcc4] rounded-xl px-2.5 py-2";
+    row.dataset.d = d ? "1" : "0";
+    row.innerHTML = `
+        <input type="text" class="sub-t inp flex-1 min-w-[140px] rounded-lg px-3 py-2 text-sm transition" placeholder="子任務內容" value="${esc(t)}">
+        <label class="flex items-center gap-1 text-xs text-[#8a7561]" title="執行日期">
+            <i class="fa-solid fa-calendar-day text-[#c8a06a]"></i>
+            <input type="date" class="sub-x inp w-[8.6rem] rounded-lg px-2 py-2 text-sm transition" value="${esc(x)}">
+        </label>
+        <label class="flex items-center gap-1 text-xs text-[#8a7561]" title="截止日">
+            <i class="fa-solid fa-calendar-check text-[#c8a06a]"></i>
+            <input type="date" class="sub-e inp w-[8.6rem] rounded-lg px-2 py-2 text-sm transition" value="${esc(due)}">
+        </label>
+        <button type="button" onclick="this.parentNode.remove();syncStatusSel()" title="刪除此子任務"
+                class="w-8 h-8 shrink-0 rounded-lg text-[#b3a288] hover:text-[#c05555] hover:bg-[#f7dede] transition"><i class="fa-solid fa-trash-can"></i></button>`;
+    $("subsBox").appendChild(row);
+    syncStatusSel();
+}
+function syncStatusSel(){
+    const hasSubs = $("subsBox").children.length > 0;
+    const sel = $("fStatus");
+    sel.disabled = hasSubs;
+    sel.title = hasSubs ? "有子任務時，狀態由勾選狀況自動計算" : "";
+    sel.classList.toggle("opacity-50", hasSubs);
+}
+function collectSubs(){
+    return [...document.querySelectorAll("#subsBox .subrow")].map(r=>({
+        t: r.querySelector(".sub-t").value.trim(),
+        x: r.querySelector(".sub-x").value,
+        due: r.querySelector(".sub-e").value,
+        d: r.dataset.d==="1" ? 1 : 0
+    })).filter(s=>s.t!=="");
+}
+
+/* ================= 分類下拉選單（表單與篩選列） ================= */
+function renderCatSelect(selected){
+    const sel = $("fCategory");
+    const cur = (selected!==undefined) ? selected : sel.value;
+    let opts = ['<option value="">未分類</option>'];
+    const all = [...cats];
+    if(cur && !all.includes(cur)) all.push(cur);
+    all.forEach(c=>opts.push(`<option value="${esc(c)}">${esc(c)}</option>`));
+    sel.innerHTML = opts.join("");
+    sel.value = cur || "";
+
+    const cf = $("catFilter");
+    const curF = cf.value;
+    const usedCats = [...new Set(tasks.map(t=>t.category).filter(Boolean))];
+    const merged = [...new Set([...cats, ...usedCats])];
+    cf.innerHTML = '<option value="all">全部分類</option><option value="">未分類</option>' +
+        merged.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join("");
+    cf.value = [...cf.options].some(o=>o.value===curF) ? curF : "all";
+    currentCat = cf.value;
+}
+$("catFilter").addEventListener("change", function(){ currentCat = this.value; render(); });
+
+/* ================= 新增／編輯 ================= */
+$("taskForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    const name = $("fName").value.trim();
+    if(!name){ toast("請輸入任務名稱", false); return; }
+    const btn = $("submitBtn");
+    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-paper-plane mr-1"></i>傳送中…';
+
+    const newSubs = collectSubs();
+    const base = {
+        name: name,
+        category: $("fCategory").value,
+        priority: $("fPriority").value,
+        exec: $("fExec").value,
+        due: $("fDue").value,
+        note: $("fNote").value.trim(),
+        repeat: $("fRepeat").value,
+        subs: JSON.stringify(newSubs)
+    };
+
+    if(editingId){
+        const t = tasks.find(x=>x.id===editingId);
+        const prevStatus = t ? t.status : "待辦";
+        let status = prevStatus;
+        let progress = t ? t.progress : 0;
+        if(newSubs.length){
+            const done = newSubs.filter(s=>s.d).length;
+            progress = Math.round(done/newSubs.length*100);
+            status = done===newSubs.length ? "已完成" : done>0 ? "進行中" : "待辦";
+        } else {
+            status = $("fStatus").value || status;
+            if(status==="已完成") progress = 100;
+            else if(status==="待辦") progress = 0;
+            else if(progress>=100) progress = 90;
+        }
+        const payload = Object.assign({action:"update", id:editingId, status:status, progress:progress}, base);
+        const eid = editingId;
+        const doSpawn = prevStatus!=="已完成" && status==="已完成" && base.repeat;
+        postAction(payload, ()=>{ const x=tasks.find(v=>v.id===eid); return x && x.name===name; }, "任務已更新")
+            .then(()=>{
+                if(doSpawn){
+                    const nt = { id:eid, name:base.name, category:base.category, priority:base.priority,
+                                 exec:base.exec, due:base.due, note:base.note, repeat:base.repeat, subs:newSubs };
+                    return spawnNext(nt);
+                }
+            })
+            .finally(()=>{ resetForm(); btn.disabled=false; });
+    } else {
+        const id = newId();
+        let st = "待辦", pg = 0;
+        if(newSubs.length){
+            const done = newSubs.filter(s=>s.d).length;
+            pg = Math.round(done/newSubs.length*100);
+            st = done===newSubs.length ? "已完成" : done>0 ? "進行中" : "待辦";
+        } else {
+            st = $("fStatus").value || "待辦";
+            pg = st==="已完成" ? 100 : 0;
+        }
+        const payload = Object.assign({action:"add", id:id, status:st, progress:pg}, base);
+        const doSpawnNew = st==="已完成" && base.repeat;
+        postAction(payload, ()=>tasks.some(v=>v.id===id), "任務已新增")
+            .then(()=>{
+                if(doSpawnNew){
+                    const nt = { id:id, name:base.name, category:base.category, priority:base.priority,
+                                 exec:base.exec, due:base.due, note:base.note, repeat:base.repeat, subs:newSubs };
+                    return spawnNext(nt);
+                }
+            })
+            .finally(()=>{ resetForm(); btn.disabled=false; });
+    }
+});
+function resetForm(){
+    editingId = null;
+    $("taskForm").reset();
+    $("fPriority").value = "中";
+    $("fStatus").value = "待辦";
+    $("fRepeat").value = "";
+    $("subsBox").innerHTML = ""; syncStatusSel();
+    renderCatSelect("");
+    $("formTitle").innerText = "新增任務";
+    $("submitBtn").innerHTML = '<i class="fa-solid fa-circle-plus mr-1"></i>新 增 任 務';
+    $("cancelEditBtn").classList.add("hidden");
+}
+$("cancelEditBtn").addEventListener("click", resetForm);
+
+function startEdit(id){
+    const t = tasks.find(x=>x.id===id);
+    if(!t) return;
+    showPage("list");
+    editingId = id;
+    $("fName").value = t.name || "";
+    renderCatSelect(t.category || "");
+    $("fPriority").value = t.priority || "中";
+    $("fStatus").value = t.status || "待辦";
+    $("fRepeat").value = t.repeat || "";
+    $("fExec").value = t.exec || "";
+    $("fDue").value = t.due || "";
+    $("fNote").value = t.note || "";
+    $("subsBox").innerHTML = ""; syncStatusSel();
+    subs(t).forEach(s=>addSubRow(s.t, s.x||"", s.due||"", s.d));
+    $("formTitle").innerText = "編輯任務";
+    $("submitBtn").innerHTML = '<i class="fa-solid fa-floppy-disk mr-1"></i>儲 存 修 改';
+    $("cancelEditBtn").classList.remove("hidden");
+    window.scrollTo({top:0, behavior:"smooth"});
+    $("fName").focus();
+}
+
+/* ================= 狀態／進度／子任務勾選／刪除 ================= */
+function setStatus(id, status){
+    const t = tasks.find(x=>x.id===id);
+    if(!t) return;
+    const prev = t.status;
+    t.status = status;
+    t.progress = status==="已完成" ? 100 : (status==="待辦" ? 0 : (t.progress>=100 ? 90 : t.progress));
+    render();
+    const doSpawn = prev!=="已完成" && status==="已完成" && t.repeat;
+    postAction(updatePayload(t),
+        ()=>{ const x=tasks.find(v=>v.id===id); return x && x.status===status; },
+        status==="已完成" ? "已標記完成 🎉" : "狀態已更新")
+        .then(()=>{ if(doSpawn) return spawnNext(t); });
+}
+function setProgress(id, progress){
+    const t = tasks.find(x=>x.id===id);
+    if(!t) return;
+    const prev = t.status;
+    progress = Math.max(0, Math.min(100, Number(progress)||0));
+    t.progress = progress;
+    t.status = progress>=100 ? "已完成" : (progress>0 ? "進行中" : t.status==="已完成" ? "進行中" : t.status);
+    render();
+    const doSpawn = prev!=="已完成" && t.status==="已完成" && t.repeat;
+    postAction(updatePayload(t),
+        ()=>{ const x=tasks.find(v=>v.id===id); return x && Number(x.progress)===progress; },
+        "進度已更新為 " + progress + "%")
+        .then(()=>{ if(doSpawn) return spawnNext(t); });
+}
+function toggleSub(id, idx){
+    const t = tasks.find(x=>x.id===id);
+    if(!t || !subs(t)[idx]) return;
+    const prev = t.status;
+    t.subs[idx].d = t.subs[idx].d ? 0 : 1;
+    const done = subDone(t), n = t.subs.length;
+    t.progress = Math.round(done/n*100);
+    t.status = done===n ? "已完成" : done>0 ? "進行中" : "待辦";
+    openSubs.add(id);
+    render();
+    const expected = t.progress;
+    const doSpawn = prev!=="已完成" && t.status==="已完成" && t.repeat;
+    postAction(updatePayload(t),
+        ()=>{ const x=tasks.find(v=>v.id===id); return x && Number(x.progress)===expected; },
+        done===n ? "全部完成 🎉" : `子任務進度 ${done}/${n}`)
+        .then(()=>{ if(doSpawn) return spawnNext(t); });
+}
+function toggleSubList(id){
+    if(openSubs.has(id)) openSubs.delete(id); else openSubs.add(id);
+    render();
+}
+function removeTask(id){
+    const t = tasks.find(x=>x.id===id);
+    if(!t) return;
+    if(!confirm("確定要刪除「" + t.name + "」嗎？此動作無法復原。")) return;
+    tasks = tasks.filter(x=>x.id!==id); render();
+    postAction({action:"delete", id:id}, ()=>!tasks.some(v=>v.id===id), "任務已刪除");
+}
+
+/* ================= 主頁籤切換 ================= */
+function showPage(w){
+    const list = w==="list";
+    $("pageList").classList.toggle("hidden", !list);
+    $("pageDash").classList.toggle("hidden", list);
+    const ACT = "ptab flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-bold transition bg-gradient-to-r from-[#e0a04a] to-[#c8823a] text-white shadow-md";
+    const INA = "ptab flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-bold transition cream-card text-[#8a7561] hover:text-[#5b452e]";
+    $("pageTabList").className = list ? ACT : INA;
+    $("pageTabDash").className = !list ? ACT : INA;
+    if(!list) renderDash();
+}
+$("pageTabList").addEventListener("click", ()=>showPage("list"));
+$("pageTabDash").addEventListener("click", ()=>showPage("dash"));
+
+/* ================= AI 建議 ================= */
+$("aiBtn").addEventListener("click", function(){
+    const btn = this, box = $("aiResult");
+    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>AI 思考中…';
+    box.classList.remove("hidden");
+    box.textContent = "正在分析你的任務清單，請稍候（約 5–20 秒）…";
+    jsonp('action=ai', 90000).then(r=>{
+        if(r && r.result==="unauthorized"){ onUnauthorized(); return; }
+        if(r && r.result==="ai"){ box.textContent = r.text || "（AI 沒有回覆內容）"; }
+        else { box.textContent = "無法取得 AI 建議：" + ((r&&r.message)||"未知錯誤"); }
+    }).catch(err=>{
+        box.textContent = "無法取得 AI 建議：" + err.message + "。請稍後再試。";
+    }).finally(()=>{
+        btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-bolt mr-1"></i>產生建議';
+    });
+});
+
+/* ================= 提醒卡（今日執行＋七天內到期，含子任務） ================= */
+let upcomingOpen = true;
+function toggleUpcoming(){
+    upcomingOpen = !upcomingOpen;
+    $("upcomingBody").classList.toggle("hidden", !upcomingOpen);
+    $("upcomingChevron").className = "fa-solid " + (upcomingOpen?"fa-chevron-up":"fa-chevron-down") + " text-[#c3b299] text-sm";
+}
+function renderUpcoming(){
+    const td = todayStr(), t7 = addDaysStr(7);
+    const todayItems = [], dueItems = [];
+    tasks.forEach(t=>{
+        if(t.status==="已完成") return;
+        if(t.exec===td) todayItems.push({id:t.id, label:t.name, category:t.category});
+        subs(t).forEach(s=>{ if(!s.d && s.x===td) todayItems.push({id:t.id, label:t.name+" › "+s.t, category:t.category}); });
+        if(t.due && t.due <= t7) dueItems.push({id:t.id, label:t.name, category:t.category, due:t.due});
+        subs(t).forEach(s=>{ if(!s.d && s.due && s.due <= t7) dueItems.push({id:t.id, label:t.name+" › "+s.t, category:t.category, due:s.due}); });
+    });
+    dueItems.sort((a,b)=> a.due<b.due?-1:1);
+
+    const card = $("upcomingCard");
+    if(todayItems.length===0 && dueItems.length===0){ card.classList.add("hidden"); return; }
+    card.classList.remove("hidden");
+    const isMon = new Date().getDay()===1;
+    $("upcomingTitle").innerText = isMon ? "📌 今天是週一，本週工作提醒" : "工作提醒";
+
+    let html = "";
+    if(todayItems.length){
+        html += `<div>
+            <div class="text-xs font-bold text-[#c8823a] mb-1.5"><i class="fa-solid fa-sun mr-1"></i>今日執行（${todayItems.length} 項）</div>` +
+            todayItems.map(it=>`
+            <div class="flex items-center justify-between gap-3 text-sm bg-[#fdf6e7] border border-[#f0dfb9] rounded-lg px-3 py-2 mb-1.5 cursor-pointer hover:bg-[#faedd2] transition" onclick="startEdit('${it.id}')">
+                <span class="truncate text-[#574432]"><i class="fa-solid fa-play text-[10px] text-[#c8823a] mr-1.5"></i>${esc(it.label)}${it.category?`<span class="ml-2 text-xs text-[#a1795a]">${esc(it.category)}</span>`:''}</span>
+                <span class="shrink-0 text-xs font-bold text-[#c8823a]">今天執行</span>
+            </div>`).join("") + `</div>`;
+    }
+    if(dueItems.length){
+        html += `<div>
+            <div class="text-xs font-bold text-[#a8742b] mb-1.5"><i class="fa-solid fa-hourglass-half mr-1"></i>七天內到期（${dueItems.length} 項）</div>` +
+            dueItems.map(it=>`
+            <div class="flex items-center justify-between gap-3 text-sm bg-[#faf4e8] rounded-lg px-3 py-2 mb-1.5 cursor-pointer hover:bg-[#f4ead6] transition" onclick="startEdit('${it.id}')">
+                <span class="truncate text-[#574432]">${esc(it.label)}${it.category?`<span class="ml-2 text-xs text-[#a1795a]">${esc(it.category)}</span>`:''}</span>
+                <span class="shrink-0 font-bold ${dueColor(it.due)}"><i class="fa-regular fa-calendar mr-1"></i>${esc(it.due)}｜${dueLabel(it.due)}</span>
+            </div>`).join("") + `</div>`;
+    }
+    $("upcomingBody").innerHTML = html;
+}
+
+/* ================= 清單頁渲染 ================= */
+$("filterTabs").addEventListener("click", e=>{
+    const b = e.target.closest(".ftab"); if(!b) return;
+    currentFilter = b.dataset.f;
+    document.querySelectorAll(".ftab").forEach(x=>{
+        const on = x.dataset.f===currentFilter;
+        x.className = "ftab px-3.5 py-1.5 rounded-full text-sm font-medium " +
+            (on ? "bg-[#f6e3c3] text-[#a8742b] border border-[#e3c48d]"
+                : "text-[#9c8a72] border border-[#e0d3ba] hover:text-[#5b452e]");
+    });
+    render();
+});
+$("searchBox").addEventListener("input", render);
+$("refreshBtn").addEventListener("click", ()=>{ toast("重新載入中…"); loadTasks(); });
+
+const PRI_STYLE = {
+    "高": "bg-[#f7dede] text-[#c05555] border-[#e6b8b8]",
+    "中": "bg-[#f8ecd2] text-[#b98a2f] border-[#e8d3a0]",
+    "低": "bg-[#eceae4] text-[#948a7b] border-[#d8d2c5]"
+};
+const PRI_ICON = { "高":"fa-solid fa-angles-up", "中":"fa-solid fa-equals", "低":"fa-solid fa-angles-down" };
+const ST_STYLE = {
+    "待辦":   "bg-[#efe6d6] text-[#8a7561] border-[#dccdb4]",
+    "進行中": "bg-[#f6e3c3] text-[#a8742b] border-[#e3c48d]",
+    "已完成": "bg-[#e2efdd] text-[#5e8f60] border-[#bcd8b8]"
+};
+const ST_ICON = { "待辦":"fa-regular fa-clipboard", "進行中":"fa-solid fa-person-running", "已完成":"fa-regular fa-circle-check" };
+
+function render(){
+    $("statTodo").innerText  = tasks.filter(t=>t.status==="待辦").length;
+    $("statDoing").innerText = tasks.filter(t=>t.status==="進行中").length;
+    $("statDone").innerText  = tasks.filter(t=>t.status==="已完成").length;
+    $("statOverdue").innerText = tasks.filter(isOverdue).length;
+
+    renderCatSelect();
+    renderTmplSelect();
+    renderUpcoming();
+
+    const kw = $("searchBox").value.trim().toLowerCase();
+    let list = tasks.filter(t=> currentFilter==="all" ? true : t.status===currentFilter);
+    if(currentCat!=="all") list = list.filter(t=> (t.category||"")===currentCat);
+    if(kw) list = list.filter(t=>
+        ((t.name||"")+(t.category||"")+(t.note||"")+subs(t).map(s=>s.t).join("")).toLowerCase().includes(kw));
+
+    const priRank = {"高":0,"中":1,"低":2};
+    list.sort((a,b)=>{
+        const da = a.status==="已完成"?1:0, db = b.status==="已完成"?1:0;
+        if(da!==db) return da-db;
+        const ta = isTodayExec(a)?0:1, tb = isTodayExec(b)?0:1;
+        if(ta!==tb) return ta-tb;
+        const oa = isOverdue(a)?0:1, ob = isOverdue(b)?0:1;
+        if(oa!==ob) return oa-ob;
+        const ea = effectiveDue(a)||"9999-99-99", eb = effectiveDue(b)||"9999-99-99";
+        if(ea!==eb) return ea<eb?-1:1;
+        return (priRank[a.priority]??1)-(priRank[b.priority]??1);
+    });
+
+    const box = $("taskList");
+    if(list.length===0){
+        box.innerHTML = `<div class="cream-card rounded-2xl p-10 text-center text-[#b3a288]">
+            <i class="fa-solid fa-mug-saucer text-3xl mb-3 block"></i>目前沒有符合條件的任務，喝口咖啡吧 ☕</div>`;
+        return;
+    }
+    box.innerHTML = list.map(t=>{
+        const done = t.status==="已完成";
+        const prog = Math.max(0, Math.min(100, Number(t.progress)||0));
+        const n = subs(t).length;
+        const hasSubs = n>0;
+        const open = openSubs.has(t.id);
+        const motherOverdue = t.status!=="已完成" && t.due && t.due < todayStr();
+        const todayExec = isTodayExec(t);
+
+        let subsHtml = "";
+        if(hasSubs && open){
+            subsHtml = `<div class="mt-3 space-y-1.5 border-t border-[#eadcc4] pt-3">` +
+                subs(t).map((s,i)=>{
+                    const sOver = !s.d && s.due && s.due < todayStr();
+                    const sToday = !s.d && s.x===todayStr();
+                    return `<label class="flex items-center gap-2.5 text-sm bg-[#faf4e8] rounded-lg px-3 py-2 cursor-pointer hover:bg-[#f4ead6] transition flex-wrap">
+                        <input type="checkbox" ${s.d?'checked':''} onchange="toggleSub('${t.id}',${i})">
+                        <span class="flex-1 min-w-[120px] ${s.d?'line-through text-[#b3a288]':'text-[#574432]'} break-words">${esc(s.t)}
+                            ${sToday?`<span class="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-[#f6e3c3] text-[#c8823a] border border-[#e3c48d] font-bold"><i class="fa-solid fa-sun mr-0.5"></i>今日執行</span>`:''}
+                        </span>
+                        <span class="shrink-0 text-xs ${s.d?'text-[#c9bda9]':'text-[#9c8a72]'}">
+                            ${s.x?`<i class="fa-solid fa-calendar-day mr-0.5"></i>執 ${esc(s.x.slice(5))}`:''}
+                            ${s.due?`<span class="ml-2 font-bold ${s.d?'':(sOver?'text-[#c05555]':dueColor(s.due))}"><i class="fa-solid fa-calendar-check mr-0.5"></i>止 ${esc(s.due.slice(5))}${s.d?'':('｜'+dueLabel(s.due))}</span>`:''}
+                        </span>
+                    </label>`;
+                }).join("") + `</div>`;
+        }
+
+        return `
+        <div class="cream-card rounded-2xl p-5 fade-in ${done?'opacity-60':''}">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 flex-wrap mb-1.5">
+                        <span class="text-xs px-2 py-0.5 rounded-full border ${ST_STYLE[t.status]||ST_STYLE['待辦']}"><i class="${ST_ICON[t.status]||ST_ICON['待辦']} mr-1"></i>${esc(t.status==='待辦'?'尚未開始':(t.status||'尚未開始'))}</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full border ${PRI_STYLE[t.priority]||PRI_STYLE['中']}"><i class="${PRI_ICON[t.priority]||PRI_ICON['中']} mr-1"></i>${esc(t.priority||'中')}</span>
+                        ${t.category?`<span class="text-xs px-2 py-0.5 rounded-full border border-[#dcc8b0] bg-[#f2e8da] text-[#a1795a]"><i class="fa-solid fa-tag mr-1"></i>${esc(t.category)}</span>`:''}
+                        ${t.repeat?`<span class="text-xs px-2 py-0.5 rounded-full border border-[#cfd8e6] bg-[#e9eef6] text-[#6b7fa3]"><i class="fa-solid fa-repeat mr-1"></i>${esc(t.repeat)}</span>`:''}
+                        ${todayExec&&!done?`<span class="text-xs px-2 py-0.5 rounded-full border border-[#e3c48d] bg-[#f6e3c3] text-[#c8823a] font-bold"><i class="fa-solid fa-sun mr-1"></i>今日執行</span>`:''}
+                    </div>
+                    <div class="font-bold text-[#5b452e] ${done?'line-through':''} break-words">${esc(t.name)}</div>
+                    ${t.note?`<div class="text-sm text-[#9c8a72] mt-1 whitespace-pre-wrap break-words">${esc(t.note)}</div>`:''}
+                    <div class="text-xs mt-2 text-[#9c8a72]">
+                        ${t.exec?`<span class="mr-3"><i class="fa-solid fa-calendar-day mr-1 text-[#c8a06a]"></i>執行 ${esc(t.exec)}</span>`:''}
+                        ${t.due?`<span class="${motherOverdue?'text-[#c05555] font-bold':''}"><i class="fa-solid fa-calendar-check mr-1 text-[#c8a06a]"></i>截止 ${esc(t.due)}${motherOverdue?'（已逾期）':''}</span>`:''}
+                        ${t.updated?`<span class="ml-3"><i class="fa-regular fa-clock mr-1"></i>更新 ${esc((t.updated||"").slice(5))}</span>`:''}
+                    </div>
+                </div>
+                <div class="flex gap-1 shrink-0">
+                    <button onclick="saveAsTmpl('${t.id}')" title="存為範本" class="w-9 h-9 rounded-lg text-[#b3a288] hover:text-[#a1795a] hover:bg-[#f2e8da] transition"><i class="fa-regular fa-bookmark"></i></button>
+                    <button onclick="startEdit('${t.id}')" title="編輯" class="w-9 h-9 rounded-lg text-[#b3a288] hover:text-[#c8823a] hover:bg-[#f6e3c3] transition"><i class="fa-solid fa-pen"></i></button>
+                    <button onclick="removeTask('${t.id}')" title="刪除" class="w-9 h-9 rounded-lg text-[#b3a288] hover:text-[#c05555] hover:bg-[#f7dede] transition"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 mt-4">
+                ${hasSubs
+                    ? `<div class="flex-1 h-2 rounded-full bg-[#efe6d6] overflow-hidden"><div class="h-full rounded-full ${done?'bg-[#8fbf92]':'bg-[#e0a04a]'}" style="width:${prog}%"></div></div>`
+                    : `<input type="range" min="0" max="100" step="5" value="${prog}" onchange="setProgress('${t.id}', this.value)" class="flex-1 h-2 cursor-pointer">`}
+                <span class="text-sm font-bold w-12 text-right ${done?'text-[#5e8f60]':'text-[#c8823a]'}">${prog}%</span>
+                ${hasSubs
+                    ? `<button onclick="toggleSubList('${t.id}')" class="text-xs px-3 py-1.5 rounded-lg bg-[#f2e8da] text-[#a1795a] border border-[#dcc8b0] hover:bg-[#ecdfc9] transition">
+                        <i class="fa-solid fa-list-check mr-1"></i>子任務 ${subDone(t)}/${n} <i class="fa-solid fa-chevron-${open?'up':'down'} ml-1 text-[10px]"></i></button>`
+                    : (t.status==="待辦"   ? `<button onclick="setStatus('${t.id}','進行中')" class="text-xs px-3 py-1.5 rounded-lg bg-[#f6e3c3] text-[#a8742b] border border-[#e3c48d] hover:bg-[#f2d9ac] transition"><i class="fa-solid fa-play mr-1"></i>開始</button>`
+                     : t.status==="進行中" ? `<button onclick="setStatus('${t.id}','已完成')" class="text-xs px-3 py-1.5 rounded-lg bg-[#e2efdd] text-[#5e8f60] border border-[#bcd8b8] hover:bg-[#d5e8cf] transition"><i class="fa-solid fa-check mr-1"></i>完成</button>`
+                     : `<button onclick="setStatus('${t.id}','進行中')" class="text-xs px-3 py-1.5 rounded-lg text-[#9c8a72] border border-[#dccdb4] hover:text-[#5b452e] transition"><i class="fa-solid fa-rotate-left mr-1"></i>還原</button>`)}
+            </div>
+            ${subsHtml}
+        </div>`;
+    }).join("");
+}
+
+/* ================= 總覽分析頁渲染 ================= */
+function makeChart(id, cfg){
+    if(charts[id]) charts[id].destroy();
+    charts[id] = new Chart($(id).getContext("2d"), cfg);
+}
+function weekMondayOf(d){
+    const x = new Date(d); const day = (x.getDay()+6)%7;
+    x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x;
+}
+function parseUpdated(s){
+    const m = /(\d{4})\/(\d{1,2})\/(\d{1,2})/.exec(s||"");
+    return m ? new Date(Number(m[1]), Number(m[2])-1, Number(m[3])) : null;
+}
+function renderDash(){
+    const total = tasks.length;
+    const done = tasks.filter(t=>t.status==="已完成");
+    const undone = tasks.filter(t=>t.status!=="已完成");
+    $("dTotal").innerText = total;
+    $("dRate").innerText = total ? Math.round(done.length/total*100) : 0;
+    $("dAvgProg").innerText = undone.length ? Math.round(undone.reduce((s,t)=>s+(Number(t.progress)||0),0)/undone.length) : 0;
+    const t7 = addDaysStr(7), td = todayStr();
+    let due7 = 0;
+    undone.forEach(t=>{
+        if(t.due && t.due>=td && t.due<=t7) due7++;
+        subs(t).forEach(s=>{ if(!s.d && s.due && s.due>=td && s.due<=t7) due7++; });
+    });
+    $("dDue7").innerText = due7;
+
+    Chart.defaults.color = "#8a7561";
+    Chart.defaults.borderColor = "rgba(151,116,60,0.12)";
+    Chart.defaults.font.family = "'Microsoft JhengHei', sans-serif";
+
+    makeChart("chartStatus", { type:"doughnut",
+        data:{ labels:["尚未開始","進行中","已完成"], datasets:[{
+            data:[ tasks.filter(t=>t.status==="待辦").length,
+                   tasks.filter(t=>t.status==="進行中").length,
+                   done.length ],
+            backgroundColor:["#cbbba4","#e3aa5a","#8fbf92"], borderWidth:0 }]},
+        options:{ maintainAspectRatio:false, plugins:{legend:{position:"bottom"}} }
+    });
+
+    makeChart("chartPriority", { type:"bar",
+        data:{ labels:["高","中","低"], datasets:[{
+            data:[ undone.filter(t=>t.priority==="高").length,
+                   undone.filter(t=>t.priority==="中").length,
+                   undone.filter(t=>t.priority==="低").length ],
+            backgroundColor:["#d98080","#e6c069","#b6ab99"], borderRadius:8 }]},
+        options:{ maintainAspectRatio:false, plugins:{legend:{display:false}},
+            scales:{ y:{beginAtZero:true, ticks:{stepSize:1}} } }
+    });
+
+    const catsAll = [...new Set(tasks.map(t=>t.category||"未分類"))];
+    makeChart("chartCategory", { type:"bar",
+        data:{ labels:catsAll, datasets:[
+            { label:"未完成", data:catsAll.map(c=>undone.filter(t=>(t.category||"未分類")===c).length), backgroundColor:"#e3aa5a", borderRadius:6 },
+            { label:"已完成", data:catsAll.map(c=>done.filter(t=>(t.category||"未分類")===c).length), backgroundColor:"#8fbf92", borderRadius:6 }
+        ]},
+        options:{ maintainAspectRatio:false, plugins:{legend:{position:"bottom"}},
+            scales:{ x:{stacked:true}, y:{stacked:true, beginAtZero:true, ticks:{stepSize:1}} } }
+    });
+
+    const thisMon = weekMondayOf(new Date());
+    const labels=[], counts=[];
+    for(let i=7;i>=0;i--){
+        const wk = new Date(thisMon); wk.setDate(wk.getDate()-i*7);
+        labels.push(String(wk.getMonth()+1).padStart(2,"0")+"/"+String(wk.getDate()).padStart(2,"0"));
+        const wkEnd = new Date(wk); wkEnd.setDate(wkEnd.getDate()+7);
+        counts.push(done.filter(t=>{
+            const d = parseUpdated(t.updated);
+            return d && d>=wk && d<wkEnd;
+        }).length);
+    }
+    makeChart("chartTrend", { type:"line",
+        data:{ labels:labels, datasets:[{ label:"完成任務數", data:counts,
+            borderColor:"#8fbf92", backgroundColor:"rgba(143,191,146,0.18)", fill:true, tension:0.35, pointRadius:4 }]},
+        options:{ maintainAspectRatio:false, plugins:{legend:{display:false}},
+            scales:{ y:{beginAtZero:true, ticks:{stepSize:1}} } }
+    });
+}
+
+/* ================= 初始化 ================= */
+(function(){
+    const d = new Date();
+    const wd = ["日","一","二","三","四","五","六"][d.getDay()];
+    $("todayLabel").innerText = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}（週${wd}）`;
+    renderCatSelect("");
+    if(GAS_URL.indexOf("TODO")===0){
+        $("loadingCard").innerHTML = '<i class="fa-solid fa-gear mr-2"></i>尚未設定後端網址：請先在 index.html 內填入 GAS_URL。';
+        showNet(true, "尚未設定 GAS_URL（Apps Script /exec 網址）。");
+    } else if(!APP_TOKEN){
+        showLock(false);
+    } else {
+        loadTasks();
+    }
+    if("serviceWorker" in navigator){
+        navigator.serviceWorker.register("./sw.js").catch(()=>{});
+    }
+})();
+</script>
+</body>
+</html>
