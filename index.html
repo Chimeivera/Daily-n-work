@@ -258,12 +258,18 @@
         <div class="cream-card rounded-2xl p-6 mb-5 border-l-4 !border-l-[#b98a5a]">
             <div class="flex items-center justify-between flex-wrap gap-3 mb-1">
                 <h2 class="font-bold text-[#5b452e]"><i class="fa-solid fa-wand-magic-sparkles text-[#b98a5a] mr-2"></i>AI 工作建議</h2>
-                <button id="aiBtn" type="button"
-                        class="px-4 py-2 rounded-xl text-sm font-bold bg-gradient-to-r from-[#b98a5a] to-[#9c6f42] text-white shadow-md hover:from-[#ad7e4e] hover:to-[#8f6338] active:scale-[0.98] transition disabled:opacity-50">
-                    <i class="fa-solid fa-bolt mr-1"></i>產生建議
-                </button>
+                <div class="flex gap-2">
+                    <button id="aiBtn" type="button" data-mode="today"
+                            class="ai-btn px-4 py-2 rounded-xl text-sm font-bold bg-gradient-to-r from-[#b98a5a] to-[#9c6f42] text-white shadow-md hover:from-[#ad7e4e] hover:to-[#8f6338] active:scale-[0.98] transition disabled:opacity-50">
+                        <i class="fa-solid fa-sun mr-1"></i>今日建議
+                    </button>
+                    <button id="aiBtn2" type="button" data-mode="review"
+                            class="ai-btn px-4 py-2 rounded-xl text-sm font-bold bg-[#f2e8da] text-[#8a6a48] border border-[#dcc8b0] shadow-sm hover:bg-[#ecdfc9] active:scale-[0.98] transition disabled:opacity-50">
+                        <i class="fa-solid fa-magnifying-glass-chart mr-1"></i>整體健檢
+                    </button>
+                </div>
             </div>
-            <p class="text-xs text-[#b3a288] mb-3">AI 會根據目前的任務與子任務清單（含執行日與截止日），建議今日優先順序、提醒風險並分析工作量。</p>
+            <p class="text-xs text-[#b3a288] mb-3">☀️ 今日建議：每天開工前按，AI 幫你挑出今天要做的 2–3 件事與可以先放著的事。🔍 整體健檢：每週按一次，專門抓卡住、逾期、安排太擠的案件。</p>
             <div id="aiResult" class="hidden rounded-xl bg-[#faf4e8] border border-[#e0cba4] p-4 text-sm text-[#574432] whitespace-pre-wrap leading-relaxed"></div>
         </div>
 
@@ -308,7 +314,7 @@
         </div>
     </div>
 
-    <p class="text-center text-xs text-[#c3b299] mt-8"><i class="fa-solid fa-cloud mr-1"></i>資料儲存於 Google 試算表 ｜ Vera </p>
+    <p class="text-center text-xs text-[#c3b299] mt-8"><i class="fa-solid fa-cloud mr-1"></i>資料儲存於 Google 試算表 ｜ 佳里奇美醫院 教學研究組</p>
 </div>
 
 <!-- Toast -->
@@ -813,19 +819,25 @@ $("pageTabList").addEventListener("click", ()=>showPage("list"));
 $("pageTabDash").addEventListener("click", ()=>showPage("dash"));
 
 /* ================= AI 建議 ================= */
-$("aiBtn").addEventListener("click", function(){
-    const btn = this, box = $("aiResult");
-    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>AI 思考中…';
-    box.classList.remove("hidden");
-    box.textContent = "正在分析你的任務清單，請稍候（約 5–20 秒）…";
-    jsonp('action=ai', 90000).then(r=>{
-        if(r && r.result==="unauthorized"){ onUnauthorized(); return; }
-        if(r && r.result==="ai"){ box.textContent = r.text || "（AI 沒有回覆內容）"; }
-        else { box.textContent = "無法取得 AI 建議：" + ((r&&r.message)||"未知錯誤"); }
-    }).catch(err=>{
-        box.textContent = "無法取得 AI 建議：" + err.message + "。請稍後再試。";
-    }).finally(()=>{
-        btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-bolt mr-1"></i>產生建議';
+document.querySelectorAll(".ai-btn").forEach(function(b){
+    b.addEventListener("click", function(){
+        const mode = this.dataset.mode, box = $("aiResult");
+        const btns = document.querySelectorAll(".ai-btn");
+        const orig = this.innerHTML, self = this;
+        btns.forEach(x=>x.disabled=true);
+        self.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>AI 思考中…';
+        box.classList.remove("hidden");
+        box.textContent = mode==="review" ? "正在健檢所有案件，請稍候（約 5–20 秒）…" : "正在分析今天該做什麼，請稍候（約 5–20 秒）…";
+        jsonp('action=ai&mode='+mode, 90000).then(r=>{
+            if(r && r.result==="unauthorized"){ onUnauthorized(); return; }
+            if(r && r.result==="ai"){ box.textContent = r.text || "（AI 沒有回覆內容）"; }
+            else { box.textContent = "無法取得 AI 建議：" + ((r&&r.message)||"未知錯誤"); }
+        }).catch(err=>{
+            box.textContent = "無法取得 AI 建議：" + err.message + "。請稍後再試。";
+        }).finally(()=>{
+            btns.forEach(x=>x.disabled=false);
+            self.innerHTML = orig;
+        });
     });
 });
 
@@ -905,7 +917,7 @@ const ST_STYLE = {
 const ST_ICON = { "待辦":"fa-regular fa-clipboard", "進行中":"fa-solid fa-person-running", "已完成":"fa-regular fa-circle-check" };
 
 function render(){
-    $("statTodo").innerText  = tasks.filter(t=>t.status==="待辦").length;
+    $("statTodo").innerText  = tasks.filter(t=>t.status==="待辦" && !isFuture(t)).length;
     $("statDoing").innerText = tasks.filter(t=>t.status==="進行中").length;
     $("statDone").innerText  = tasks.filter(t=>t.status==="已完成").length;
     $("statOverdue").innerText = tasks.filter(isOverdue).length;
@@ -919,6 +931,14 @@ function render(){
     if(currentCat!=="all") list = list.filter(t=> (t.category||"")===currentCat);
     if(kw) list = list.filter(t=>
         ((t.name||"")+(t.category||"")+(t.note||"")+subs(t).map(s=>s.t).join("")).toLowerCase().includes(kw));
+
+    // 執行日／截止日都在 21 天以後的「尚未開始」任務 → 收進未來任務區（搜尋時不收合，全部顯示）
+    let fut = [];
+    if(!kw){
+        fut = list.filter(isFuture);
+        list = list.filter(t=>!isFuture(t));
+        fut.sort((a,b)=>{ const ea=earliestDate(a)||"9999", eb=earliestDate(b)||"9999"; return ea<eb?-1:1; });
+    }
 
     const priRank = {"高":0,"中":1,"低":2};
     list.sort((a,b)=>{
@@ -934,12 +954,12 @@ function render(){
     });
 
     const box = $("taskList");
-    if(list.length===0){
+    if(list.length===0 && fut.length===0){
         box.innerHTML = `<div class="cream-card rounded-2xl p-10 text-center text-[#b3a288]">
             <i class="fa-solid fa-mug-saucer text-3xl mb-3 block"></i>目前沒有符合條件的任務，喝口咖啡吧 ☕</div>`;
         return;
     }
-    box.innerHTML = list.map(t=>{
+    const cardHtml = t=>{
         const done = t.status==="已完成";
         const prog = Math.max(0, Math.min(100, Number(t.progress)||0));
         const n = subs(t).length;
@@ -1007,7 +1027,45 @@ function render(){
             </div>
             ${subsHtml}
         </div>`;
-    }).join("");
+    };
+
+    let html = list.map(cardHtml).join("");
+    if(list.length===0 && fut.length>0){
+        html = `<div class="cream-card rounded-2xl p-8 text-center text-[#b3a288]">
+            <i class="fa-solid fa-mug-saucer text-2xl mb-2 block"></i>近期沒有要處理的任務，喝口咖啡吧 ☕</div>`;
+    }
+    if(fut.length>0){
+        html += `<div class="pt-1">
+            <button type="button" onclick="toggleFuture()"
+                    class="w-full text-left cream-card rounded-2xl px-5 py-3.5 text-sm hover:shadow-md transition flex items-center justify-between">
+                <span class="font-bold text-[#9c8a72]"><i class="fa-regular fa-calendar mr-2 text-[#c8a06a]"></i>未來任務（${fut.length}）
+                    <span class="ml-2 font-normal text-xs text-[#b3a288]">21 天後才開始，先幫你收好，時間近了會自動浮上來</span></span>
+                <i class="fa-solid fa-chevron-${futureOpen?'up':'down'} text-xs text-[#b3a288]"></i>
+            </button>
+            ${futureOpen ? `<div class="space-y-3 mt-3 opacity-80">` + fut.map(cardHtml).join("") + `</div>` : ``}
+        </div>`;
+    }
+    box.innerHTML = html;
+}
+
+/* ---- 未來任務判斷 ---- */
+let futureOpen = false;
+function toggleFuture(){ futureOpen = !futureOpen; render(); }
+function plusDaysStr(n){
+    const d = new Date(); d.setDate(d.getDate()+n);
+    return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function earliestDate(t){
+    const ds = [];
+    if(t.exec) ds.push(t.exec);
+    if(t.due) ds.push(t.due);
+    subs(t).forEach(s=>{ if(!s.d){ if(s.x) ds.push(s.x); if(s.due) ds.push(s.due); } });
+    return ds.length ? ds.sort()[0] : null;
+}
+function isFuture(t){
+    if(t.status !== "待辦") return false;
+    const e = earliestDate(t);
+    return !!e && e > plusDaysStr(21);
 }
 
 /* ================= 總覽分析頁渲染 ================= */
