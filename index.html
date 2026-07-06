@@ -98,6 +98,12 @@
         <button id="pageTabDash" class="ptab flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-bold cream-card text-[#8a7561] hover:text-[#5b452e] transition">
             <i class="fa-solid fa-chart-pie mr-1.5"></i>總覽分析
         </button>
+        <button id="pageTabCal" class="ptab flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-bold cream-card text-[#8a7561] hover:text-[#5b452e] transition">
+            <i class="fa-regular fa-calendar-days mr-1.5"></i>月曆
+        </button>
+        <button id="pageTabHist" class="ptab flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-bold cream-card text-[#8a7561] hover:text-[#5b452e] transition">
+            <i class="fa-solid fa-book-open mr-1.5"></i>完成紀錄
+        </button>
     </div>
 
     <!-- 連線狀態列 -->
@@ -238,6 +244,8 @@
             </select>
             <div class="relative flex-1 min-w-[160px]">
                 <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-[#c3b299] text-sm"></i>
+                <input type="text" id="quickAdd" placeholder="⚡ 快速新增：輸入任務名稱按 Enter（其餘欄位之後再補）"
+                       class="inp w-full rounded-xl px-3.5 py-3 mb-3 transition">
                 <input type="text" id="searchBox" placeholder="搜尋任務、子任務、備註…"
                        class="inp w-full rounded-xl pl-10 pr-4 py-2 text-sm transition">
             </div>
@@ -312,6 +320,35 @@
                 <div class="h-56"><canvas id="chartTrend"></canvas></div>
             </div>
         </div>
+    </div>
+
+    <!-- ==================== 頁面三：月曆 ==================== -->
+    <div id="pageCal" class="hidden">
+        <div class="cream-card rounded-2xl p-5 mb-4">
+            <div class="flex items-center justify-between mb-4">
+                <button onclick="calMove(-1)" class="w-9 h-9 rounded-lg text-[#a1795a] hover:bg-[#f2e8da] transition"><i class="fa-solid fa-chevron-left"></i></button>
+                <div class="flex items-center gap-2">
+                    <span id="calTitle" class="font-bold text-[#5b452e]"></span>
+                    <button onclick="calToday()" class="text-xs px-2.5 py-1 rounded-lg bg-[#f6e3c3] text-[#a8742b] border border-[#e3c48d] hover:bg-[#f2d9ac] transition">今天</button>
+                </div>
+                <button onclick="calMove(1)" class="w-9 h-9 rounded-lg text-[#a1795a] hover:bg-[#f2e8da] transition"><i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+            <div class="grid grid-cols-7 text-center text-xs text-[#9c8a72] font-bold mb-1">
+                <div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div class="text-[#c08585]">六</div><div class="text-[#c08585]">日</div>
+            </div>
+            <div id="calGrid" class="grid grid-cols-7 gap-1"></div>
+            <p class="text-xs text-[#b3a288] mt-3"><span class="mr-3"><i class="fa-solid fa-sun text-[#c8823a] mr-1"></i>執行日</span><span><i class="fa-solid fa-calendar-check text-[#c05555] mr-1"></i>截止日</span>　點日期看當天事項</p>
+        </div>
+        <div id="calDetail"></div>
+    </div>
+
+    <!-- ==================== 頁面四：完成紀錄 ==================== -->
+    <div id="pageHist" class="hidden">
+        <div class="cream-card rounded-2xl p-5 mb-4">
+            <h2 class="font-bold text-[#5b452e]"><i class="fa-solid fa-book-open text-[#b98a5a] mr-2"></i>完成紀錄</h2>
+            <p class="text-xs text-[#b3a288] mt-1.5">所有完成的任務按月份整理。每個月份可一鍵複製「月報文字」，貼進工作報告使用。完成超過 60 天的任務會從任務清單封存到這裡，資料永久保存於試算表。</p>
+        </div>
+        <div id="histBox" class="space-y-4"></div>
     </div>
 
     <p class="text-center text-xs text-[#c3b299] mt-8"><i class="fa-solid fa-cloud mr-1"></i>資料儲存於 Google 試算表 ｜ 佳里奇美醫院 教學研究組</p>
@@ -479,7 +516,7 @@ function postAction(payload, verifyFn, okMsg){
 function updatePayload(t){
     return { action:"update", id:t.id, name:t.name, category:t.category, priority:t.priority,
              exec:t.exec, due:t.due, status:t.status, progress:t.progress, note:t.note,
-             repeat:t.repeat||"", subs: JSON.stringify(subs(t)) };
+             repeat:t.repeat||"", subs: JSON.stringify(subs(t)), pinned: t.pinned||"" };
 }
 
 /* ================= 重複任務：完成時自動建立下一期 ================= */
@@ -806,17 +843,22 @@ function removeTask(id){
 
 /* ================= 主頁籤切換 ================= */
 function showPage(w){
-    const list = w==="list";
-    $("pageList").classList.toggle("hidden", !list);
-    $("pageDash").classList.toggle("hidden", list);
+    const pages = { list:"pageList", dash:"pageDash", cal:"pageCal", hist:"pageHist" };
+    const tabs  = { list:"pageTabList", dash:"pageTabDash", cal:"pageTabCal", hist:"pageTabHist" };
     const ACT = "ptab flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-bold transition bg-gradient-to-r from-[#e0a04a] to-[#c8823a] text-white shadow-md";
     const INA = "ptab flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-sm font-bold transition cream-card text-[#8a7561] hover:text-[#5b452e]";
-    $("pageTabList").className = list ? ACT : INA;
-    $("pageTabDash").className = !list ? ACT : INA;
-    if(!list) renderDash();
+    Object.keys(pages).forEach(k=>{
+        $(pages[k]).classList.toggle("hidden", k!==w);
+        $(tabs[k]).className = (k===w) ? ACT : INA;
+    });
+    if(w==="dash") renderDash();
+    if(w==="cal") renderCal();
+    if(w==="hist") renderHist();
 }
 $("pageTabList").addEventListener("click", ()=>showPage("list"));
 $("pageTabDash").addEventListener("click", ()=>showPage("dash"));
+$("pageTabCal").addEventListener("click", ()=>showPage("cal"));
+$("pageTabHist").addEventListener("click", ()=>showPage("hist"));
 
 /* ================= AI 建議 ================= */
 document.querySelectorAll(".ai-btn").forEach(function(b){
@@ -931,6 +973,8 @@ function render(){
     if(currentCat!=="all") list = list.filter(t=> (t.category||"")===currentCat);
     if(kw) list = list.filter(t=>
         ((t.name||"")+(t.category||"")+(t.note||"")+subs(t).map(s=>s.t).join("")).toLowerCase().includes(kw));
+    // 封存：完成超過 60 天的任務不出現在任務清單（可在「完成紀錄」頁查看）
+    if(!kw) list = list.filter(t=>!isArchived(t));
 
     // 執行日／截止日都在 21 天以後的「尚未開始」任務 → 收進未來任務區（搜尋時不收合，全部顯示）
     let fut = [];
@@ -942,6 +986,8 @@ function render(){
 
     const priRank = {"高":0,"中":1,"低":2};
     list.sort((a,b)=>{
+        const pa = (a.pinned && a.status!=="已完成")?0:1, pb = (b.pinned && b.status!=="已完成")?0:1;
+        if(pa!==pb) return pa-pb;
         const da = a.status==="已完成"?1:0, db = b.status==="已完成"?1:0;
         if(da!==db) return da-db;
         const ta = isTodayExec(a)?0:1, tb = isTodayExec(b)?0:1;
@@ -996,6 +1042,7 @@ function render(){
                         <span class="text-xs px-2 py-0.5 rounded-full border ${PRI_STYLE[t.priority]||PRI_STYLE['中']}"><i class="${PRI_ICON[t.priority]||PRI_ICON['中']} mr-1"></i>${esc(t.priority||'中')}</span>
                         ${t.category?`<span class="text-xs px-2 py-0.5 rounded-full border border-[#dcc8b0] bg-[#f2e8da] text-[#a1795a]"><i class="fa-solid fa-tag mr-1"></i>${esc(t.category)}</span>`:''}
                         ${t.repeat?`<span class="text-xs px-2 py-0.5 rounded-full border border-[#cfd8e6] bg-[#e9eef6] text-[#6b7fa3]"><i class="fa-solid fa-repeat mr-1"></i>${esc(t.repeat)}</span>`:''}
+                        ${t.pinned&&!done?`<span class="text-xs px-2 py-0.5 rounded-full border border-[#d9b2b2] bg-[#f7e6e6] text-[#b06a6a] font-bold"><i class="fa-solid fa-thumbtack mr-1"></i>置頂</span>`:''}
                         ${todayExec&&!done?`<span class="text-xs px-2 py-0.5 rounded-full border border-[#e3c48d] bg-[#f6e3c3] text-[#c8823a] font-bold"><i class="fa-solid fa-sun mr-1"></i>今日執行</span>`:''}
                     </div>
                     <div class="font-bold text-[#5b452e] ${done?'line-through':''} break-words">${esc(t.name)}</div>
@@ -1007,6 +1054,7 @@ function render(){
                     </div>
                 </div>
                 <div class="flex gap-1 shrink-0">
+                    <button onclick="togglePin('${t.id}')" title="${t.pinned?'取消置頂':'置頂'}" class="w-9 h-9 rounded-lg ${t.pinned?'text-[#b06a6a] bg-[#f7e6e6]':'text-[#b3a288] hover:text-[#b06a6a] hover:bg-[#f7e6e6]'} transition"><i class="fa-solid fa-thumbtack"></i></button>
                     <button onclick="saveAsTmpl('${t.id}')" title="存為範本" class="w-9 h-9 rounded-lg text-[#b3a288] hover:text-[#a1795a] hover:bg-[#f2e8da] transition"><i class="fa-regular fa-bookmark"></i></button>
                     <button onclick="startEdit('${t.id}')" title="編輯" class="w-9 h-9 rounded-lg text-[#b3a288] hover:text-[#c8823a] hover:bg-[#f6e3c3] transition"><i class="fa-solid fa-pen"></i></button>
                     <button onclick="removeTask('${t.id}')" title="刪除" class="w-9 h-9 rounded-lg text-[#b3a288] hover:text-[#c05555] hover:bg-[#f7dede] transition"><i class="fa-solid fa-trash"></i></button>
@@ -1063,9 +1111,169 @@ function earliestDate(t){
     return ds.length ? ds.sort()[0] : null;
 }
 function isFuture(t){
-    if(t.status !== "待辦") return false;
+    if(t.status !== "待辦" || t.pinned) return false;
     const e = earliestDate(t);
     return !!e && e > plusDaysStr(21);
+}
+function doneDateOf(t){
+    if(t.doneAt) return t.doneAt.slice(0,10).replace(/\//g,"-");
+    const m = /(\d{4})\/(\d{1,2})\/(\d{1,2})/.exec(t.updated||"");
+    return m ? (m[1]+"-"+String(m[2]).padStart(2,"0")+"-"+String(m[3]).padStart(2,"0")) : "";
+}
+function isArchived(t){
+    if(t.status!=="已完成") return false;
+    const d = doneDateOf(t);
+    return !!d && d < plusDaysStr(-60);
+}
+
+/* ---- 置頂 ---- */
+function togglePin(id){
+    const t = tasks.find(x=>x.id===id); if(!t) return;
+    const val = t.pinned ? "" : "1";
+    t.pinned = val; render();
+    postAction({action:"pin", id:id, val:val},
+        ()=>{ const x=tasks.find(v=>v.id===id); return x && String(x.pinned||"")===val; },
+        val ? "已置頂 📌" : "已取消置頂");
+}
+
+/* ---- 快速新增 ---- */
+$("quickAdd").addEventListener("keydown", function(e){
+    if(e.key!=="Enter") return;
+    e.preventDefault();
+    const name = this.value.trim();
+    if(!name) return;
+    const inp = this;
+    inp.disabled = true;
+    const id = newId();
+    postAction({action:"add", id:id, name:name, category:"", priority:"中",
+                exec:"", due:"", status:"待辦", progress:0, note:"", repeat:"", subs:"[]", pinned:""},
+        ()=>tasks.some(v=>v.id===id), "⚡ 已快速新增，日期分類可再編輯補上")
+        .finally(()=>{ inp.disabled=false; inp.value=""; inp.focus(); });
+});
+
+/* ================= 月曆頁 ================= */
+let calY = new Date().getFullYear(), calM = new Date().getMonth(), calSel = "";
+function calMove(n){ calM += n; if(calM<0){calM=11;calY--;} if(calM>11){calM=0;calY++;} calSel=""; renderCal(); }
+function calToday(){ const d=new Date(); calY=d.getFullYear(); calM=d.getMonth(); calSel=todayStr(); renderCal(); }
+function calItemsOf(dstr){
+    const items = [];
+    tasks.forEach(t=>{
+        if(isArchived(t)) return;
+        const done = t.status==="已完成";
+        if(t.exec===dstr) items.push({type:"exec", label:t.name, done:done, id:t.id});
+        if(t.due===dstr)  items.push({type:"due",  label:t.name, done:done, id:t.id});
+        subs(t).forEach(s=>{
+            if(s.x===dstr)   items.push({type:"exec", label:t.name+" › "+s.t, done:!!s.d, id:t.id});
+            if(s.due===dstr) items.push({type:"due",  label:t.name+" › "+s.t, done:!!s.d, id:t.id});
+        });
+    });
+    return items;
+}
+function renderCal(){
+    $("calTitle").innerText = calY + " 年 " + (calM+1) + " 月";
+    const first = new Date(calY, calM, 1);
+    const days = new Date(calY, calM+1, 0).getDate();
+    const lead = (first.getDay()+6)%7; // 週一起始
+    const td = todayStr();
+    let cells = [];
+    for(let i=0;i<lead;i++) cells.push(`<div></div>`);
+    for(let d=1;d<=days;d++){
+        const ds = calY+"-"+String(calM+1).padStart(2,"0")+"-"+String(d).padStart(2,"0");
+        const items = calItemsOf(ds);
+        const ex = items.filter(i=>i.type==="exec"&&!i.done).length;
+        const du = items.filter(i=>i.type==="due"&&!i.done).length;
+        const isToday = ds===td, isSel = ds===calSel;
+        cells.push(`<button type="button" onclick="calSel='${ds}';renderCal()"
+            class="min-h-[52px] rounded-lg p-1 text-left align-top border transition
+                   ${isSel?'border-[#c8823a] bg-[#f6e3c3]':isToday?'border-[#e3c48d] bg-[#faf1de]':'border-[#efe6d6] bg-[#fffcf5] hover:bg-[#faf4e8]'}">
+            <div class="text-[11px] font-bold ${isToday?'text-[#c8823a]':'text-[#8a7561]'}">${d}</div>
+            <div class="flex flex-wrap gap-0.5 mt-0.5">
+                ${ex?`<span class="text-[9px] px-1 rounded bg-[#f6e3c3] text-[#c8823a] font-bold"><i class="fa-solid fa-sun"></i>${ex}</span>`:""}
+                ${du?`<span class="text-[9px] px-1 rounded bg-[#f7dede] text-[#c05555] font-bold"><i class="fa-solid fa-calendar-check"></i>${du}</span>`:""}
+            </div></button>`);
+    }
+    $("calGrid").innerHTML = cells.join("");
+    const box = $("calDetail");
+    if(!calSel){ box.innerHTML=""; return; }
+    const items = calItemsOf(calSel);
+    box.innerHTML = `<div class="cream-card rounded-2xl p-5">
+        <h3 class="text-sm font-bold text-[#5b452e] mb-3"><i class="fa-regular fa-calendar mr-1.5 text-[#c8a06a]"></i>${calSel}</h3>` +
+        (items.length===0 ? `<p class="text-sm text-[#b3a288]">這天沒有安排 ☕</p>` :
+        `<div class="space-y-1.5">` + items.map(i=>
+            `<div class="flex items-center gap-2 text-sm bg-[#faf4e8] rounded-lg px-3 py-2 ${i.done?'opacity-50':''}">
+                <i class="fa-solid ${i.type==='exec'?'fa-sun text-[#c8823a]':'fa-calendar-check text-[#c05555]'}"></i>
+                <span class="${i.done?'line-through text-[#b3a288]':'text-[#574432]'} break-words">${esc(i.label)}</span>
+                ${i.done?'<span class="text-[10px] text-[#8fbf92] font-bold ml-auto shrink-0">已完成</span>':''}
+            </div>`).join("") + `</div>`) + `</div>`;
+}
+
+/* ================= 完成紀錄頁 ================= */
+let histOpen = new Set();
+function rocMonth(key){ const [y,m]=key.split("-"); return (Number(y)-1911)+" 年 "+Number(m)+" 月"; }
+function renderHist(){
+    const done = tasks.filter(t=>t.status==="已完成");
+    const box = $("histBox");
+    if(done.length===0){
+        box.innerHTML = `<div class="cream-card rounded-2xl p-10 text-center text-[#b3a288]">
+            <i class="fa-regular fa-folder-open text-3xl mb-3 block"></i>還沒有完成的任務紀錄</div>`;
+        return;
+    }
+    const groups = {};
+    done.forEach(t=>{
+        const d = doneDateOf(t) || "0000-00";
+        const key = d.slice(0,7);
+        (groups[key] = groups[key] || []).push(t);
+    });
+    const keys = Object.keys(groups).sort().reverse();
+    if(histOpen.size===0 && keys.length) histOpen.add(keys[0]);
+    box.innerHTML = keys.map(k=>{
+        const arr = groups[k].slice().sort((a,b)=>{ const da=doneDateOf(a), db=doneDateOf(b); return da<db?1:-1; });
+        const open = histOpen.has(k);
+        const items = open ? `<div class="mt-1 divide-y divide-[#f0e7d6]">` + arr.map(t=>{
+            const d = doneDateOf(t);
+            const n = subs(t).length;
+            return `<div class="py-2.5 px-1 flex items-start gap-2.5">
+                <i class="fa-solid fa-circle-check text-[#8fbf92] mt-0.5"></i>
+                <div class="min-w-0 flex-1">
+                    <div class="text-sm text-[#574432] break-words">${esc(t.name)}
+                        ${t.category?`<span class="ml-1.5 text-xs text-[#a1795a]">[${esc(t.category)}]</span>`:''}
+                        ${t.repeat?`<span class="ml-1 text-xs text-[#6b7fa3]"><i class="fa-solid fa-repeat"></i></span>`:''}</div>
+                    ${n?`<div class="text-xs text-[#b3a288] mt-0.5">含 ${n} 項子任務</div>`:''}
+                </div>
+                <span class="shrink-0 text-xs text-[#9c8a72]">${d?esc(d.slice(5)):''} 完成</span>
+            </div>`;
+        }).join("") + `</div>` : "";
+        return `<div class="cream-card rounded-2xl p-5">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+                <button type="button" onclick="histToggle('${k}')" class="text-left font-bold text-[#5b452e] hover:text-[#c8823a] transition">
+                    <i class="fa-solid fa-chevron-${open?'up':'down'} mr-2 text-xs text-[#b3a288]"></i>${rocMonth(k)}
+                    <span class="ml-2 text-xs font-normal text-[#9c8a72]">完成 ${arr.length} 件</span>
+                </button>
+                <button type="button" onclick="copyMonth('${k}')" class="text-xs px-3 py-1.5 rounded-lg bg-[#f2e8da] text-[#a1795a] border border-[#dcc8b0] hover:bg-[#ecdfc9] transition">
+                    <i class="fa-regular fa-copy mr-1"></i>複製月報
+                </button>
+            </div>${items}</div>`;
+    }).join("");
+}
+function histToggle(k){ histOpen.has(k) ? histOpen.delete(k) : histOpen.add(k); renderHist(); }
+function copyMonth(k){
+    const arr = tasks.filter(t=>t.status==="已完成" && (doneDateOf(t)||"").slice(0,7)===k)
+        .sort((a,b)=>{ const da=doneDateOf(a), db=doneDateOf(b); return da<db?-1:1; });
+    let txt = rocMonth(k) + "完成事項（共 " + arr.length + " 件）\n";
+    arr.forEach((t,i)=>{
+        const d = doneDateOf(t);
+        txt += (i+1) + ". " + t.name + (t.category?("（"+t.category+"）"):"") + (d?(" — "+Number(d.slice(5,7))+"/"+Number(d.slice(8,10))+" 完成"):"") + "\n";
+        subs(t).forEach(s=>{ txt += "　・" + s.t + "\n"; });
+    });
+    const fallback = ()=>{
+        const ta = document.createElement("textarea");
+        ta.value = txt; document.body.appendChild(ta); ta.select();
+        try{ document.execCommand("copy"); toast("月報已複製 📋"); }catch(e){ toast("複製失敗，請手動選取", false); }
+        ta.remove();
+    };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(txt).then(()=>toast("月報已複製，直接貼進報告吧 📋")).catch(fallback);
+    } else fallback();
 }
 
 /* ================= 總覽分析頁渲染 ================= */
